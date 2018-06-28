@@ -95,6 +95,17 @@ class Queue(object):
 
         return length
 
+    def clean(self):
+        """
+        Delete all elements from the queue
+        """
+        if not self.connected:
+            raise ConnectionError('Queue is not connected')
+        try:
+            self.rdb.delete(self._name)
+        except redis.exceptions.ConnectionError as err:
+            raise ConnectionError(str(err))
+
     def connect(self):
         """
         Creates the connection with the redis server.
