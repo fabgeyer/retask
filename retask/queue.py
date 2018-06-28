@@ -233,7 +233,7 @@ class Queue(object):
             return False
         return job
 
-    def send(self, task, result, expire=60):
+    def send(self, task, result, expire=60, raw=False):
         """
         Sends the result back to the producer. This should be called if only you
         want to return the result in async manner.
@@ -242,7 +242,10 @@ class Queue(object):
         :arg result: Result data to be send back. Should be in JSON serializable.
         :arg expire: Time in seconds after the key expires. Default is 60 seconds.
         """
-        self.rdb.lpush(task.urn, json.dumps(result))
+        if raw:
+            self.rdb.lpush(task.urn, result)
+        else:
+            self.rdb.lpush(task.urn, json.dumps(result))
         self.rdb.expire(task.urn, expire)
 
     def __repr__(self):
@@ -278,6 +281,7 @@ class Job(object):
         self.rdb = rdb
         self.urn = uuid.uuid4().urn
         self.__result = None
+        self.__rawresult = None
 
     @property
     def result(self):
@@ -287,11 +291,33 @@ class Job(object):
         """
         if self.__result:
             return self.__result
-        data = self.rdb.rpop(self.urn)
+
+        if self.__rawresult:
+            data = self.__rawresult
+        else:
+            data = self.rdb.rpop(self.urn)
+
         if data:
+            self.__rawresult = data
             self.rdb.delete(self.urn)
             data = json.loads(data)
             self.__result = data
+            return data
+        else:
+            return None
+
+    @property
+    def rawresult(self):
+        """
+        Returns the raw result from the worker for this job. This is used to pass
+        result in async way.
+        """
+        if self.__rawresult:
+            return self.__rawresult
+
+        data = self.rdb.rpop(self.urn)
+        if data:
+            self.__rawresult = data
             return data
         else:
             return None
