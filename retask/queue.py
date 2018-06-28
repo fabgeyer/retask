@@ -322,7 +322,7 @@ class Job(object):
         else:
             return None
 
-    def wait(self, wait_time=0):
+    def wait(self, wait_time=0, raw=False):
         """
         Blocking call to check if the worker returns the result. One can use
         job.result after this call returns ``True``.
@@ -336,13 +336,17 @@ class Job(object):
             This is a blocking call, you can specity wait_time argument for timeout.
 
         """
+        if raw and self.__rawresult:
+            return True
         if self.__result:
             return True
         data = self.rdb.brpop(self.urn, wait_time)
         if data:
+            self.__rawresult = data
             self.rdb.delete(self.urn)
-            data = json.loads(data[1])
-            self.__result = data
+            if not raw:
+                data = json.loads(data[1])
+                self.__result = data
             return True
         else:
             return False
