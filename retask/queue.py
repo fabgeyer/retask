@@ -28,7 +28,12 @@ __version__ = '1.0'
 retask Queue implementation
 
 """
-import json
+try:
+    # Try using ujson as replacement for json
+    import ujson as json
+except:
+    # Fallback to standard json package
+    import json
 import redis
 import uuid
 import six
