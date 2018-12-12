@@ -62,6 +62,7 @@ class Queue(object):
         self.config.update(specified_config)
         self.rdb = None
         self.connected = False
+        self.default_expire = 60
 
     def names(self):
         """
@@ -238,7 +239,7 @@ class Queue(object):
             return False
         return job
 
-    def send(self, task, result, expire=60):
+    def send(self, task, result, expire=None):
         """
         Sends the result back to the producer. This should be called if only you
         want to return the result in async manner.
@@ -248,7 +249,10 @@ class Queue(object):
         :arg expire: Time in seconds after the key expires. Default is 60 seconds.
         """
         self.rdb.lpush(task.urn, json.dumps(result))
-        self.rdb.expire(task.urn, expire)
+        if expire is None:
+            self.rdb.expire(task.urn, self.default_expire)
+        else:
+            self.rdb.expire(task.urn, expire)
 
     def __repr__(self):
             if not self:
