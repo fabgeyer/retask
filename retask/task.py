@@ -50,6 +50,7 @@ class Task(object):
         else:
             self._data = data
         self.urn = urn
+        self.raw = raw
 
     @property
     def data(self):
@@ -57,6 +58,8 @@ class Task(object):
         The python object containing information for the current task
 
         """
+        if self.raw:
+            return self._data
         return json.loads(self._data)
 
     @property

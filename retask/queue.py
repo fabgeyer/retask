@@ -49,7 +49,7 @@ class Queue(object):
     to the localhost.
 
     """
-    def __init__(self, name, config=None):
+    def __init__(self, name, config=None, raw=False):
         specified_config = config or {}
         self.name = name
         self._name = 'retaskqueue-' + name
@@ -63,6 +63,7 @@ class Queue(object):
         self.rdb = None
         self.connected = False
         self.default_expire = 60
+        self.raw = raw
 
     def names(self):
         """
@@ -161,8 +162,10 @@ class Queue(object):
 
         data = self.rdb.brpop(self._name, wait_time)
         if data:
-            task = Task()
-            task.__dict__ = json.loads(data[1])
+            task = Task(raw=self.raw)
+            if not self.raw:
+                task.__dict__ = json.loads(data[1])
+            task._data = data[1]
             return task
         else:
             return False
@@ -199,7 +202,7 @@ class Queue(object):
             return None
         if isinstance(data, six.binary_type):
             data = six.text_type(data, 'utf-8', errors = 'replace')
-        task = Task()
+        task = Task(raw=self.raw)
         task.__dict__ = json.loads(data)
         return task
 
@@ -229,12 +232,15 @@ class Queue(object):
         if not self.connected:
             raise ConnectionError('Queue is not connected')
 
+        #We can set the value to the queue
+        job = Job(self.rdb, raw=self.raw)
         try:
-            #We can set the value to the queue
-            job = Job(self.rdb)
-            task.urn = job.urn
-            text = json.dumps(task.__dict__)
-            self.rdb.lpush(self._name, text)
+            if self.raw:
+                self.rdb.lpush(self._name, task)
+            else:
+                task.urn = job.urn
+                text = json.dumps(task.__dict__)
+                self.rdb.lpush(self._name, text)
         except Exception as err:
             return False
         return job
@@ -248,7 +254,10 @@ class Queue(object):
         :arg result: Result data to be send back. Should be in JSON serializable.
         :arg expire: Time in seconds after the key expires. Default is 60 seconds.
         """
-        self.rdb.lpush(task.urn, json.dumps(result))
+        if self.raw:
+            self.rdb.lpush(task.urn, result)
+        else:
+            self.rdb.lpush(task.urn, json.dumps(result))
         if expire is None:
             self.rdb.expire(task.urn, self.default_expire)
         else:
@@ -283,9 +292,10 @@ class Job(object):
 
     :arg rdb: The underlying redis connection.
     """
-    def __init__(self, rdb):
+    def __init__(self, rdb, raw=False):
         self.rdb = rdb
         self.urn = uuid.uuid4().urn
+        self.raw = raw
         self.__result = None
 
     @property
@@ -299,7 +309,8 @@ class Job(object):
         data = self.rdb.rpop(self.urn)
         if data:
             self.rdb.delete(self.urn)
-            data = json.loads(data)
+            if not self.raw:
+                data = json.loads(data)
             self.__result = data
             return data
         else:
@@ -324,8 +335,9 @@ class Job(object):
         data = self.rdb.brpop(self.urn, wait_time)
         if data:
             self.rdb.delete(self.urn)
-            data = json.loads(data[1])
-            self.__result = data
+            if not self.raw:
+                data = json.loads(data[1])
+            self.__result = data[1]
             return True
         else:
             return False
